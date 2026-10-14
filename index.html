@@ -22,7 +22,10 @@
       display: flex; align-items: center; gap: 8px;
       margin-bottom: 30px; font-size: 0.85rem; color: #aaa;
     }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: #e63946; transition: background 0.3s; }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #e63946; transition: background 0.3s;
+    }
     .dot.online { background: #2a9d8f; box-shadow: 0 0 8px #2a9d8f; }
     .grid {
       display: grid;
@@ -37,10 +40,17 @@
       transition: transform 0.2s, box-shadow 0.2s;
     }
     .card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(0,0,0,0.4); }
-    .card-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8ecae6; margin-bottom: 12px; }
+    .card-label {
+      font-size: 0.8rem; text-transform: uppercase;
+      letter-spacing: 1.5px; color: #8ecae6; margin-bottom: 12px;
+    }
     .card-value { font-size: 2.4rem; font-weight: 700; line-height: 1; }
     .card-unit { font-size: 1rem; font-weight: 400; color: #aaa; margin-left: 6px; }
-    .badge { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; margin-top: 10px; }
+    .badge {
+      display: inline-block; padding: 4px 14px; border-radius: 20px;
+      font-size: 0.85rem; font-weight: 600; margin-top: 10px;
+      background: #555; color: #fff;
+    }
     .badge.clear  { background: #2a9d8f; color: #fff; }
     .badge.slight { background: #e9c46a; color: #222; }
     .badge.turbid { background: #e63946; color: #fff; }
@@ -48,25 +58,31 @@
 
     #historyBtn {
       margin-top: 40px; padding: 12px 28px; border: none; border-radius: 10px;
-      background: #8ecae6; color: #0f2027; font-weight: 700; cursor: pointer; letter-spacing: 1px;
+      background: #8ecae6; color: #0f2027; font-weight: 700;
+      cursor: pointer; letter-spacing: 1px;
     }
+    #historyBtn:hover { background: #a8d8ee; }
     #historyPanel {
       display: none; max-width: 900px; width: 100%; margin-top: 24px;
-      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
       border-radius: 16px; padding: 24px;
     }
     #archiveList { list-style: none; padding: 0; }
     #archiveList li {
       padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.1);
       display: flex; justify-content: space-between; align-items: center;
+      gap: 12px;
     }
     #archiveList button {
       padding: 6px 14px; border-radius: 6px; border: none;
       background: #2a9d8f; color: white; cursor: pointer;
     }
+    #archiveList button:hover { background: #21867a; }
   </style>
 </head>
 <body>
+
   <h1>AquaSense</h1>
   <p class="subtitle">Real-time Water Quality Monitor</p>
 
@@ -80,15 +96,18 @@
       <div class="card-label">pH Level</div>
       <div class="card-value" id="phValue">--<span class="card-unit">pH</span></div>
     </div>
+
     <div class="card">
       <div class="card-label">Turbidity</div>
       <div class="card-value" id="turbValue">--<span class="card-unit">V</span></div>
       <span class="badge" id="turbBadge">--</span>
     </div>
+
     <div class="card">
       <div class="card-label">Temperature</div>
-      <div class="card-value" id="tempValue">--<span class="card-unit">°C</span></div>
+      <div class="card-value" id="tempValue">--<span class="card-unit">&deg;C</span></div>
     </div>
+
     <div class="card">
       <div class="card-label">pH Voltage (raw)</div>
       <div class="card-value" id="phVoltage">--<span class="card-unit">V</span></div>
@@ -98,6 +117,7 @@
   <p class="timestamp" id="lastUpdate">Waiting for data...</p>
 
   <button id="historyBtn">VIEW HISTORY</button>
+
   <div id="historyPanel">
     <h2 style="margin-bottom: 16px; font-size: 1.2rem;">📁 Archived History</h2>
     <ul id="archiveList"></ul>
@@ -107,13 +127,17 @@
     // =====================================================
     // CONFIGURATION
     // =====================================================
-    const FIREBASE_URL = "https://aquasense-261e2-default-rtdb.asia-southeast1.firebasedatabase.app";
-    const LATEST_PATH = "/aquasense/latest.json";
+    const FIREBASE_URL =
+      "https://aquasense-261e2-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+    const LATEST_PATH  = "/aquasense/latest.json";
     const ARCHIVE_PATH = "/aquasense/archive.json";
-    const REFRESH_MS = 180000; // 3 minutes
+
+    // Refresh rate — 3 minutes (180,000 ms)
+    const REFRESH_MS = 180000;
 
     // =====================================================
-    // STATUS INDICATOR
+    // HELPERS
     // =====================================================
     function setOnline(isOnline) {
       const dot = document.getElementById("statusDot");
@@ -128,50 +152,99 @@
     }
 
     function fmt(num, decimals) {
-      if (num === null || num === undefined || isNaN(num)) return "--";
+      if (num === null || num === undefined || num === "" || isNaN(num)) return "--";
       return Number(num).toFixed(decimals);
     }
 
+    // Parses whatever timestamp format the ESP32 sends.
+    // Handles: "YYYY-MM-DD HH:MM:SS", "YYYY-MM-DDTHH:MM:SS", Unix seconds (number), milliseconds (number)
+    function parseTimestamp(ts) {
+      if (!ts) return null;
+
+      // If string in "YYYY-MM-DD HH:MM:SS" format → make Safari-safe
+      if (typeof ts === "string") {
+        const iso = ts.replace(" ", "T");
+        const d = new Date(iso);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      // If number: decide if seconds (10 digits) or milliseconds (13 digits)
+      if (typeof ts === "number") {
+        const ms = ts < 1e12 ? ts * 1000 : ts;
+        const d = new Date(ms);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      return null;
+    }
+
     // =====================================================
-    // FETCH LATEST DATA (every 3 minutes)
+    // FETCH LATEST DATA
+    // Uses the EXACT field names your ESP32 uploads:
+    //   pH, pHVoltage, temperature, timestamp,
+    //   turbidityStatus, turbidityVoltage
     // =====================================================
     async function fetchData() {
       try {
-        const res = await fetch(FIREBASE_URL + LATEST_PATH);
+        const res = await fetch(FIREBASE_URL + LATEST_PATH + "?t=" + Date.now(), {
+          cache: "no-store"
+        });
         if (!res.ok) throw new Error("HTTP " + res.status);
 
         const data = await res.json();
-        if (!data) { setOnline(false); return; }
+
+        if (!data) {
+          setOnline(false);
+          return;
+        }
 
         setOnline(true);
 
+        // -------- pH VALUE --------
         document.getElementById("phValue").innerHTML =
-          fmt(data.pHValue, 2) + '<span class="card-unit">pH</span>';
+          fmt(data.pH, 2) + '<span class="card-unit">pH</span>';
 
-        document.getElementById("turbValue").innerHTML =
-          fmt(data.turbidityVoltage, 2) + '<span class="card-unit">V</span>';
-
-        const badge = document.getElementById("turbBadge");
-        const status = (data.turbidityStatus || "").toUpperCase();
-        badge.textContent = status || "--";
-        badge.className = "badge";
-        if (status === "CLEAR")       badge.classList.add("clear");
-        else if (status === "SLIGHT") badge.classList.add("slight");
-        else if (status === "TURBID") badge.classList.add("turbid");
-
-        const temp = data.temperature;
-        document.getElementById("tempValue").innerHTML =
-          (temp === null || temp === undefined)
-            ? '--<span class="card-unit">°C</span>'
-            : fmt(temp, 1) + '<span class="card-unit">°C</span>';
-
+        // -------- pH VOLTAGE --------
         document.getElementById("phVoltage").innerHTML =
           fmt(data.pHVoltage, 3) + '<span class="card-unit">V</span>';
 
-        if (data.timestamp) {
-          const d = new Date(data.timestamp * 1000);
+        // -------- TURBIDITY VOLTAGE --------
+        document.getElementById("turbValue").innerHTML =
+          fmt(data.turbidityVoltage, 2) + '<span class="card-unit">V</span>';
+
+        // -------- TURBIDITY STATUS BADGE --------
+        const badge  = document.getElementById("turbBadge");
+        const status = (data.turbidityStatus || "").toUpperCase().trim();
+        badge.textContent = status || "--";
+        badge.className = "badge";  // reset
+
+        if (status.includes("CLEAR")) {
+          badge.classList.add("clear");
+        } else if (status.includes("SLIGHT")) {
+          badge.classList.add("slight");
+        } else if (status.includes("TURBID")) {
+          badge.classList.add("turbid");
+        }
+        // else: leave default gray
+
+        // -------- TEMPERATURE --------
+        const temp = data.temperature;
+        document.getElementById("tempValue").innerHTML =
+          (temp === null || temp === undefined || isNaN(temp))
+            ? '--<span class="card-unit">&deg;C</span>'
+            : fmt(temp, 1) + '<span class="card-unit">&deg;C</span>';
+
+        // -------- TIMESTAMP --------
+        const dt = parseTimestamp(data.timestamp);
+        if (dt) {
           document.getElementById("lastUpdate").textContent =
-            "Last update: " + d.toLocaleString();
+            "Last update: " + dt.toLocaleString();
+        } else if (data.timestamp) {
+          document.getElementById("lastUpdate").textContent =
+            "Last update: " + data.timestamp;
+        } else {
+          document.getElementById("lastUpdate").textContent =
+            "Last update: unknown";
         }
 
       } catch (err) {
@@ -181,7 +254,7 @@
     }
 
     // =====================================================
-    // HISTORY VIEW (on button click)
+    // HISTORY VIEW (archive listing)
     // =====================================================
     document.getElementById("historyBtn").addEventListener("click", async () => {
       const panel = document.getElementById("historyPanel");
@@ -196,14 +269,17 @@
       list.innerHTML = "<li>Loading...</li>";
 
       try {
-        const res = await fetch(FIREBASE_URL + ARCHIVE_PATH);
+        const res = await fetch(FIREBASE_URL + ARCHIVE_PATH + "?t=" + Date.now(), {
+          cache: "no-store"
+        });
         const data = await res.json();
 
         if (!data) {
-          list.innerHTML = "<li>No archives yet.</li>";
+          list.innerHTML = "<li>No archives yet. First archive happens 6 hours after boot.</li>";
           return;
         }
 
+        // Newest first
         const keys = Object.keys(data).sort().reverse();
         list.innerHTML = "";
 
@@ -211,13 +287,18 @@
           const entryCount = Object.keys(data[key]).length;
 
           const li = document.createElement("li");
-          li.innerHTML = `
-            <span>${key.replace("_", " at ").replace("-", "/")}</span>
-            <span style="color:#8ecae6; font-size:0.85rem;">${entryCount} readings</span>
-            <button data-key="${key}">Download JSON</button>
-          `;
 
-          li.querySelector("button").addEventListener("click", () => {
+          const label = document.createElement("span");
+          label.textContent = key.replace("_", " at ");
+
+          const count = document.createElement("span");
+          count.style.cssText = "color:#8ecae6; font-size:0.85rem;";
+          count.textContent = `${entryCount} readings`;
+
+          const btn = document.createElement("button");
+          btn.textContent = "Download JSON";
+
+          btn.addEventListener("click", () => {
             const blob = new Blob(
               [JSON.stringify(data[key], null, 2)],
               { type: "application/json" }
@@ -230,17 +311,21 @@
             URL.revokeObjectURL(url);
           });
 
+          li.appendChild(label);
+          li.appendChild(count);
+          li.appendChild(btn);
           list.appendChild(li);
         });
 
       } catch (err) {
         console.error(err);
-        list.innerHTML = "<li style='color:#e63946'>Failed to load archives.</li>";
+        list.innerHTML =
+          "<li style='color:#e63946'>Failed to load archives.</li>";
       }
     });
 
     // =====================================================
-    // INIT
+    // INIT — fetch on load + every REFRESH_MS
     // =====================================================
     fetchData();
     setInterval(fetchData, REFRESH_MS);
